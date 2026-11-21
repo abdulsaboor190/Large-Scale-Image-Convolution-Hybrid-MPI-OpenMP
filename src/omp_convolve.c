@@ -50,10 +50,16 @@ static void install_schedule(void)
 
 static const char *schedule_name(omp_sched_t kind)
 {
-    if (kind == omp_sched_static) return "static";
-    if (kind == omp_sched_dynamic) return "dynamic";
-    if (kind == omp_sched_guided) return "guided";
-    if (kind == omp_sched_auto) return "auto";
+    /*
+     * libgomp ORs omp_sched_monotonic into the kind it returns.
+     * That bit only says chunks are handed out in order. The name on the
+     * RESULT line is the schedule itself: static, dynamic, guided, or auto.
+     */
+    unsigned base = (unsigned)kind & ~(unsigned)omp_sched_monotonic;
+    if (base == (unsigned)omp_sched_static) return "static";
+    if (base == (unsigned)omp_sched_dynamic) return "dynamic";
+    if (base == (unsigned)omp_sched_guided) return "guided";
+    if (base == (unsigned)omp_sched_auto) return "auto";
     return "other";
 }
 
