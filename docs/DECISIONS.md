@@ -14,15 +14,18 @@ A throwaway naive sequential Sobel (gx and gy, clamp borders, one core, `-O3`) o
 
 Gaussian and sharpen need one pass instead of two, so they are about half as slow. A single grayscale 20,000 x 20,000 image therefore does not meet the proposal's target of a sequential run lasting "at least several minutes". Numbers will differ on your machines, and an optimised baseline will be faster still.
 
-### Recommendation
-Use **two datasets**:
+### Final choice
+Dataset B (the batch) was dropped to save time. Dataset A (the single 20,000 x 20,000 image) is the only benchmark dataset. Do not generate the batch and do not implement batch mode.
+
+### Original recommendation (superseded)
+The original plan, kept here so the estimate stays on record, was two datasets:
 
 | Dataset | Purpose | Spec |
 |---------|---------|------|
 | **A: single big image** | Demonstrates tile/row decomposition and halo exchange, which is the core MPI story | 20,000 x 20,000, 8-bit grayscale PGM, 400 MB |
 | **B: batch** | Gives a sequential baseline of several minutes, and a second parallel pattern (distribute whole images) | 1,000-2,000 images of 2048 x 2048, grayscale PGM, about 4-8 GB total |
 
-If disk space is a problem for B, use fewer or smaller images and say so in the report. Choose the final batch count by running the Phase 1 baseline and growing it until the baseline is a few minutes with margin. **[confirm]** with the instructor that A + B is acceptable, since the proposal says "either/or".
+Dataset B is not used. The single 20,000 x 20,000 image is the whole performance study.
 
 ### Format: 8-bit grayscale binary PGM (P5)
 - Trivial to parse: header, then raw bytes. Each rank can seek to its own rows (`MPI_File_read_at`) without any decoder.
@@ -43,7 +46,7 @@ Timing does not depend on image content for convolution, so synthetic data is va
 | Item | Decision |
 |------|----------|
 | Operation | Correlation (kernel not flipped) |
-| Border policy | **Clamp-to-edge** (replicate the border pixel). Chosen because the halo at the global top/bottom is then just a copy of the edge row. **[confirm]** if the instructor prefers zero-padding |
+| Border policy | **Clamp-to-edge** (replicate the border pixel). **Final.** The halo at the global top/bottom is a copy of the edge row. |
 | Kernel sizes | 3x3, 5x5, 7x7; halo width = radius = size / 2 |
 | Kernels | Sobel (x and y), Gaussian (binomial), sharpen (classic 3x3; unsharp mask for 5x5 and 7x7), defined in `src/kernels.h` and mirrored in `scripts/refconv.py` |
 | Sobel output | Magnitude `sqrt(gx^2 + gy^2)` |
