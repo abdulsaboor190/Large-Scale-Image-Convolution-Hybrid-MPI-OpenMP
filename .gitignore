@@ -1,0 +1,5 @@
+build/
+results/*.csv
+data/large/
+__pycache__/
+*.o
