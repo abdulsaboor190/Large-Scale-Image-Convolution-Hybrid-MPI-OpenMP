@@ -4,7 +4,7 @@
 # Schedules: static (default chunk), static 1/16/64,
 # dynamic 1/16/64/256, guided.
 # The program honours OMP_SCHEDULE because its loop is schedule(runtime).
-# Appends to results/omp_schedule_tuning.csv (header written once).
+# Starts from a clean results/omp_schedule_tuning.csv each run.
 cd "$(dirname "$0")/.."
 set -euo pipefail
 
@@ -25,9 +25,7 @@ if [[ ! -x "$BIN" ]]; then
 fi
 
 mkdir -p results
-if [[ ! -f "$CSV" ]]; then
-    echo "filter,k,threads,schedule,chunk,run,compute_s,total_s" > "$CSV"
-fi
+echo "filter,k,threads,schedule,chunk,run,compute_s,total_s" > "$CSV"
 
 # kind:chunk. An empty chunk means OMP_SCHEDULE=<kind> and csv chunk 0.
 schedules=(

@@ -27,12 +27,13 @@
 #include "pgm_io.h"
 
 /*
- * Schedule locked in after scripts/tune_omp.sh.
- * Chunk 0 means "OpenMP chooses the chunk". For static, that is one
- * contiguous block of rows per thread (about height/threads rows each).
- * docs/omp_tuning.md says why this one won.
+ * Schedule chosen from results/omp_schedule_tuning.csv.
+ * See docs/omp_tuning.md. static with chunk 0 had the lowest sum of
+ * median compute times. Chunk 0 tells OpenMP to pick the chunk: for
+ * static that is one contiguous block of about height/threads rows
+ * per thread.
  *
- * The loop uses schedule(runtime), so this ICV is what actually runs.
+ * The loop uses schedule(runtime), so this value is what actually runs.
  * Set OMP_SCHEDULE (for example OMP_SCHEDULE=dynamic,16) to try something
  * else without editing this file. When that variable is set, we leave the
  * runtime's value alone.
