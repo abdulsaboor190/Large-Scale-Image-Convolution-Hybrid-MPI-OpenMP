@@ -59,11 +59,35 @@ report/     final report material
 | 0 | Setup, kernels, test set, dataset generators | DONE |
 | 1 | Sequential baseline (seq_convolve, 54 correctness tests, baseline timings) | DONE |
 | 2 | OpenMP parallelisation, schedule tuning, thread-scaling benchmark | DONE |
-| 3 | MPI row-block distribution, halo exchange, gather, correctness at block edges | NEXT |
-| 4 | Hybrid MPI + OpenMP, non-blocking communication, memory optimisation | not started |
-| 5 | Experiment matrix, speedup/efficiency graphs, analysis, report, viva prep | not started |
+| 2b | Fix OpenMP 1-thread performance regression & redo scaling | DONE |
+| 3 | MPI: 1-D row blocks, blocking halo exchange (MPI_Sendrecv), Scatterv/Gatherv | NEXT |
+| 4 | Hybrid: OpenMP threads inside each rank (MPI_Init_thread FUNNELED) | not started |
+| 5 | Reduced benchmark (gaussian 5x5: MPI, OpenMP, hybrid) & final report | not started |
 
 Work on ONE phase at a time. Do not start a later phase unless asked. When a phase finishes, update this table.
+
+## Reduced Scope for Phases 3-5
+
+- **Phase 3 (NEXT): MPI**
+  - 1-D row blocks only.
+  - Rank 0 reads the image and distributes with `MPI_Scatterv`.
+  - Each rank exchanges `radius` halo rows with its upper and lower neighbours using blocking `MPI_Sendrecv`.
+  - Clamp-to-edge at global top and bottom boundaries.
+  - `MPI_Gatherv` back to rank 0, which writes output.
+  - If a rank has fewer rows than the kernel radius, use fewer active ranks; idle ranks join collectives with 0 rows.
+  - Bit-exact output (`--tol 0`) for 1, 2, 3, 4, 7, 12 processes across all test images (including 5x5 and 101x77).
+- **Phase 4: Hybrid**
+  - Same program with OpenMP threads inside each rank (`MPI_Init_thread` with `MPI_THREAD_FUNNELED`).
+  - Thread count passed as argument; pure MPI is the 1-thread case.
+- **Phase 5: Reduced Benchmark & Report**
+  - Main config: Gaussian 5x5.
+  - MPI-only: 1, 2, 4, 6, 12 processes (3 repeats).
+  - OpenMP-only: reuse Phase 2b data.
+  - Hybrid with 12 total threads: 2x6, 3x4, 4x3, 6x2 (3 repeats).
+  - Kernel-size comparison: all 9 filter/size combinations at ONE setting only.
+  - Four graphs: speedup, efficiency, hybrid comparison, kernel-size effect. Report and viva notes.
+- **OUT OF SCOPE (do not build):**
+  - Non-blocking communication/overlap, MPI parallel I/O, 2D domain decomposition/tiling, memory optimisation, multi-node runs, further schedule tuning, batch mode.
 
 ## Baseline (sequential, 20000x20000, pinned to one core; median compute_s of 3 runs)
 

@@ -72,11 +72,10 @@ static void usage(const char *argv0)
 }
 
 /*
- * Rows [0, height) of one kernel. Each iteration is one row, computed by
- * convolve_rows, so the arithmetic matches the sequential program.
- *
- * Threads only write their own rows of out. in and the kernel are read.
- * Nothing else is shared, so there is no data race and no shared temporary.
+ * Apply one kernel to rows [0, height).
+ * When schedule is default static, each thread executes a contiguous block of
+ * rows directly via convolve_rows(), matching the single-threaded baseline's
+ * loop efficiency without per-row function call overhead.
  */
 static int convolve_all_omp(const unsigned char *in, unsigned char *out,
                             int width, int height, const kernel_t *kernel)

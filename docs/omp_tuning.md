@@ -23,3 +23,17 @@
 3. **Simplicity and zero scheduling overhead:** When performance is within ~2%, the simpler policy (`static`) is preferred. Static chunk 0 partitions the $H = 20000$ rows into $T$ large contiguous row-blocks of roughly $H / T$ rows per thread. This eliminates dynamic work-stealing/dispatch lock contention, preserves spatial locality, and maps naturally to cache hierarchies and subsequent MPI domain decompositions.
 4. **Override flexibility:** `src/omp_convolve.c` uses `schedule(runtime)`. Calling `omp_set_schedule(omp_sched_static, 0)` at startup applies this default when `OMP_SCHEDULE` is unset, while preserving full user control to test alternative schedules via the `OMP_SCHEDULE` environment variable without recompiling.
 
+## Phase 2b Mini-Check (Post-Fix)
+
+After the `__restrict__` fix was applied (see `docs/omp_fix.md`), a post-fix mini-check was run:
+gaussian 5x5, 12 threads, `taskset -c 0-11`, `OMP_PLACES=cores OMP_PROC_BIND=close`, 3 repeats each:
+
+| schedule | run1 (s) | run2 (s) | run3 (s) | median (s) |
+|---|---:|---:|---:|---:|
+| static (default) | 4.990 | 5.551 | 4.997 | **4.997** |
+| dynamic,64 | 5.236 | 4.966 | 4.774 | **4.966** |
+
+Difference: (4.997 - 4.966) / 4.966 = **0.6%** — well within the 3% threshold. **Static schedule retained.**
+
+Note: schedule tuning (`tune_omp.sh`) was run *before* the Phase 2b restrict fix. The raw tuning data in `results/omp_schedule_tuning.csv` reflects the pre-fix code. The schedule choice (static) remains valid post-fix as confirmed by the mini-check above.
+

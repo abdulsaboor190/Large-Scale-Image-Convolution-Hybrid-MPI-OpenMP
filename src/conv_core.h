@@ -80,7 +80,8 @@ static int range_ok(int width, int height, int row_start, int row_end)
  * because the kernel hangs off the range and borders clamp to the global edge.
  * Returns 0 on success, -1 on a bad argument.
  */
-static int convolve_rows(const unsigned char *in, unsigned char *out,
+static int convolve_rows(const unsigned char * __restrict__ in,
+                         unsigned char * __restrict__ out,
                          int width, int height, int row_start, int row_end,
                          const kernel_t *kernel)
 {
@@ -102,7 +103,8 @@ static int convolve_rows(const unsigned char *in, unsigned char *out,
  * so this is convolve_rows with two kernels and a sqrt instead of one write.
  * gx and gy must be the same size (3, 5, or 7).
  */
-static int sobel_rows(const unsigned char *in, unsigned char *out,
+static int sobel_rows(const unsigned char * __restrict__ in,
+                      unsigned char * __restrict__ out,
                       int width, int height, int row_start, int row_end,
                       const kernel_t *gx, const kernel_t *gy)
 {
