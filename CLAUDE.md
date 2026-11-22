@@ -58,8 +58,8 @@ report/     final report material
 |-------|---------|--------|
 | 0 | Setup, kernels, test set, dataset generators | DONE |
 | 1 | Sequential baseline (seq_convolve, 54 correctness tests, baseline timings) | DONE |
-| 2 | OpenMP parallelisation, schedule tuning, thread-scaling benchmark | NEXT |
-| 3 | MPI row-block distribution, halo exchange, gather, correctness at block edges | not started |
+| 2 | OpenMP parallelisation, schedule tuning, thread-scaling benchmark | DONE |
+| 3 | MPI row-block distribution, halo exchange, gather, correctness at block edges | NEXT |
 | 4 | Hybrid MPI + OpenMP, non-blocking communication, memory optimisation | not started |
 | 5 | Experiment matrix, speedup/efficiency graphs, analysis, report, viva prep | not started |
 

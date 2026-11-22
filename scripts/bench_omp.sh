@@ -25,9 +25,7 @@ if [[ ! -x "$BIN" ]]; then
 fi
 
 mkdir -p results
-if [[ ! -f "$CSV" ]]; then
-    echo "filter,k,threads,run,width,height,compute_s,total_s" > "$CSV"
-fi
+echo "filter,k,threads,run,width,height,compute_s,total_s" > "$CSV"
 
 for threads in 1 2 3 4 6 8 12; do
     for filter in sobel gaussian sharpen; do

@@ -38,3 +38,39 @@ mpirun: Open MPI 5.0.10-1 (openmpi-bin and libopenmpi-dev). mpirun --version exi
 python3: Python 3.14.4 (pdc-venv: numpy 2.5.5, Pillow 13.0.0)
 benchmark: taskset -c 4, OMP_NUM_THREADS=1, three repeats, median written to results/baseline_seq_summary.csv
 note: repository is on the Windows filesystem (/mnt/c). compute_s starts after the image is in memory; total_s includes that read and the write of the output. WSL sees 12 logical CPUs and 3.5 GiB RAM.
+
+OpenMP Scaling Benchmark Settings:
+schedule: static (chunk 0, compiled default in src/omp_convolve.c)
+OMP_PLACES: cores
+OMP_PROC_BIND: close
+OMP_SCHEDULE: unset (uses compiled default)
+threads: 1, 2, 3, 4, 6, 8, 12
+repeats: 3 per (filter, k, threads)
+image: data/large/big_20000.pgm (20000x20000 8-bit grayscale PGM)
+
+lscpu -e:
+
+
+OpenMP Scaling Benchmark Settings:
+schedule: static (chunk 0, compiled default in src/omp_convolve.c)
+OMP_PLACES: cores
+OMP_PROC_BIND: close
+OMP_SCHEDULE: unset (uses compiled default)
+threads: 1, 2, 3, 4, 6, 8, 12
+repeats: 3 per (filter, k, threads)
+image: data/large/big_20000.pgm (20000x20000 8-bit grayscale PGM)
+
+lscpu -e:
+CPU NODE SOCKET CORE L1d:L1i:L2:L3 ONLINE
+  0    0      0    0 0:0:0:0          yes
+  1    0      0    0 0:0:0:0          yes
+  2    0      0    1 1:1:1:0          yes
+  3    0      0    1 1:1:1:0          yes
+  4    0      0    2 2:2:2:0          yes
+  5    0      0    2 2:2:2:0          yes
+  6    0      0    3 3:3:3:0          yes
+  7    0      0    3 3:3:3:0          yes
+  8    0      0    4 4:4:4:0          yes
+  9    0      0    4 4:4:4:0          yes
+ 10    0      0    5 5:5:5:0          yes
+ 11    0      0    5 5:5:5:0          yes
