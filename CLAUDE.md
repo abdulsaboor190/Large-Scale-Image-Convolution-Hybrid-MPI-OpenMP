@@ -60,8 +60,8 @@ report/     final report material
 | 1 | Sequential baseline (seq_convolve, 54 correctness tests, baseline timings) | DONE |
 | 2 | OpenMP parallelisation, schedule tuning, thread-scaling benchmark | DONE |
 | 2b | Fix OpenMP 1-thread performance regression & redo scaling | DONE |
-| 3 | MPI: 1-D row blocks, blocking halo exchange (MPI_Sendrecv), Scatterv/Gatherv | NEXT |
-| 4 | Hybrid: OpenMP threads inside each rank (MPI_Init_thread FUNNELED) | not started |
+| 3 | MPI: 1-D row blocks, blocking halo exchange (MPI_Sendrecv), Scatterv/Gatherv | DONE |
+| 4 | Hybrid: OpenMP threads inside each rank (MPI_Init_thread FUNNELED) | NEXT |
 | 5 | Reduced benchmark (gaussian 5x5: MPI, OpenMP, hybrid) & final report | not started |
 
 Work on ONE phase at a time. Do not start a later phase unless asked. When a phase finishes, update this table.

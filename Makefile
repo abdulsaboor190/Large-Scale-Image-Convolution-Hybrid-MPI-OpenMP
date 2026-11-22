@@ -3,17 +3,17 @@ CFLAGS  = -O3 -std=gnu11 -Wall -Wextra -fopenmp
 LDFLAGS = -fopenmp -lm
 
 BUILD = build
-BINS  = $(BUILD)/hello_hybrid $(BUILD)/test_kernels $(BUILD)/seq_convolve $(BUILD)/omp_convolve
+BINS  = $(BUILD)/hello_hybrid $(BUILD)/test_kernels $(BUILD)/seq_convolve $(BUILD)/omp_convolve $(BUILD)/mpi_convolve
 
 all: $(BINS)
 
 $(BUILD)/%: src/%.c src/kernels.h | $(BUILD)
 	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
 
-# seq_convolve also includes the PGM header. A rule with no recipe only
-# adds that dependency; the pattern rule above still does the compile.
+# Programs that include the PGM header and shared conv core
 $(BUILD)/seq_convolve: src/pgm_io.h src/conv_core.h
 $(BUILD)/omp_convolve: src/pgm_io.h src/conv_core.h
+$(BUILD)/mpi_convolve: src/pgm_io.h src/conv_core.h
 
 $(BUILD):
 	mkdir -p $(BUILD)
