@@ -41,6 +41,16 @@ Only Dataset A: one synthetic 20000x20000 grayscale PGM (400 MB) at data/large/b
 - mpirun --oversubscribe is for correctness tests only. Never oversubscribe for timing runs.
 - OpenMP settings for benchmarks: OMP_PLACES=cores OMP_PROC_BIND=close.
 
+### Verified mpirun Binding Recipes (Ryzen 5 7430U, 6 cores / 12 SMT threads):
+- **$P \times T = 12$ combos (all 12 hardware threads, no oversubscription):**
+  `OMP_PLACES=threads OMP_PROC_BIND=close mpirun --use-hwthread-cpus --bind-to hwthread --map-by socket:PE=T -np P ./build/mpi_convolve <in> <out> <filter> <k> T`
+- **$P \times T \le 6$ combos (1 thread per physical core, no SMT):**
+  `OMP_PLACES=cores OMP_PROC_BIND=close mpirun --bind-to core --map-by socket:PE=T -np P ./build/mpi_convolve <in> <out> <filter> <k> T`
+- **Pure MPI ($T=1, P \le 6$):**
+  `mpirun --bind-to core --map-by core -np P ./build/mpi_convolve <in> <out> <filter> <k> 1`
+- **Pure MPI ($T=1, 6 < P \le 12$):**
+  `mpirun --use-hwthread-cpus --bind-to hwthread --map-by hwthread -np P ./build/mpi_convolve <in> <out> <filter> <k> 1`
+
 ## Layout
 
 src/        kernels.h, pgm_io.h, seq_convolve.c (+ omp/mpi/hybrid programs as they are added)
@@ -61,8 +71,8 @@ report/     final report material
 | 2 | OpenMP parallelisation, schedule tuning, thread-scaling benchmark | DONE |
 | 2b | Fix OpenMP 1-thread performance regression & redo scaling | DONE |
 | 3 | MPI: 1-D row blocks, blocking halo exchange (MPI_Sendrecv), Scatterv/Gatherv | DONE |
-| 4 | Hybrid: OpenMP threads inside each rank (MPI_Init_thread FUNNELED) | NEXT |
-| 5 | Reduced benchmark (gaussian 5x5: MPI, OpenMP, hybrid) & final report | not started |
+| 4 | Hybrid: OpenMP threads inside each rank (MPI_Init_thread FUNNELED) | DONE |
+| 5 | Reduced benchmark (gaussian 5x5: MPI, OpenMP, hybrid) & final report | NEXT |
 
 Work on ONE phase at a time. Do not start a later phase unless asked. When a phase finishes, update this table.
 
@@ -93,11 +103,11 @@ Work on ONE phase at a time. Do not start a later phase unless asked. When a pha
 
 | filter | 3x3 | 5x5 | 7x7 |
 |--------|-----|-----|-----|
-| sobel | 13.480 s | 23.079 s | 37.458 s |
-| gaussian | 5.948 s | 11.488 s | 19.475 s |
-| sharpen | 6.604 s | 12.360 s | 20.467 s |
+| sobel | 11.329 s | 22.424 s | 41.100 s |
+| gaussian | 6.327 s | 12.678 s | 22.011 s |
+| sharpen | 6.759 s | 12.703 s | 21.037 s |
 
-The full nine-configuration suite takes about 150 s sequentially. Raw data: results/baseline_seq.csv; medians: results/baseline_seq_summary.csv. These are the T_sequential values for all speedup calculations. Expect speedup to flatten after 6 threads (SMT), and a low-power laptop CPU may slow down under full load. Describe this honestly in the analysis.
+The full nine-configuration suite takes about 156 s sequentially. Raw data: results/baseline_seq.csv; medians: results/baseline_seq_summary.csv. These are the T_sequential values for all speedup calculations. Expect speedup to flatten after 6 threads (SMT), and a low-power laptop CPU may slow down under full load. Describe this honestly in the analysis.
 
 ## How to work
 

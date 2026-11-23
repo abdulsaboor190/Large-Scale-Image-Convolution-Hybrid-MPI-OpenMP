@@ -1,28 +1,26 @@
 /*
- * mpi_convolve.c - Pure MPI image convolution with 1-D row-block decomposition.
+ * mpi_convolve.c - Hybrid MPI + OpenMP image convolution with 1-D row-block decomposition.
  *
  * Usage:
- *   mpirun -np P ./build/mpi_convolve <in.pgm> <out.pgm> <sobel|gaussian|sharpen> <3|5|7>
+ *   mpirun -np P ./build/mpi_convolve <in.pgm> <out.pgm> <sobel|gaussian|sharpen> <3|5|7> [threads]
  *
- * Phase 3 design rules (docs/mpi_design.md):
- *   - Rank 0 reads the PGM header and distributes image dimensions to all ranks.
- *   - Active ranks rule: PA = max(1, min(P, h / r)), ensuring every active rank owns >= r rows.
- *   - Idle ranks (rank >= PA) own 0 rows and join collectives with count 0.
- *   - MPI_Scatterv distributes contiguous row-blocks from rank 0 into the middle of local buffers.
- *   - Rank 0 frees its full input buffer immediately after scatter to conserve memory.
- *   - Blocking MPI_Sendrecv exchanges halo rows of radius r with neighbors.
- *   - Clamp-to-edge at global image borders (replicate row 0 or row h-1).
- *   - Convolution uses conv_core.h over local buffer in range [r, r + local_rows).
- *   - MPI_Gatherv collects computed rows onto rank 0, which writes out.pgm.
- *   - Timing: MPI_Wtime with MPI_Barrier and MPI_Reduce(..., MPI_MAX).
+ * Phase 4 hybrid design rules (docs/hybrid_design.md):
+ *   - MPI_Init_thread with MPI_THREAD_FUNNELED (abort if provided < FUNNELED).
+ *   - Optional 5th argument [threads] (default: 1, range: 1 to 64).
+ *   - If threads == 1, mode=mpi; if threads > 1, mode=hybrid.
+ *   - All MPI calls, scatter/gather, halo exchange and I/O are performed by the master thread.
+ *   - Inside each active rank, local rows [radius, radius + local_rows) are parallelized with
+ *     OpenMP using schedule(runtime) and locked default omp_sched_static, chunk 0.
+ *   - Arithmetic reuses conv_core.h (convolve_rows, sobel_rows) for bit-exact identity.
  *   - stdout (rank 0 only):
- *       RESULT mode=mpi filter=... k=... w=... h=... procs=... active=... threads=1 \
+ *       RESULT mode=<mpi|hybrid> filter=... k=... w=... h=... procs=... active=... threads=... \
  *              scatter_s=... halo_s=... conv_s=... compute_s=... gather_s=... total_s=...
  */
 
 #include <errno.h>
 #include <limits.h>
 #include <mpi.h>
+#include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,23 +28,42 @@
 #include "conv_core.h"
 #include "pgm_io.h"
 
+#define CHOSEN_SCHED_KIND  omp_sched_static
+#define CHOSEN_SCHED_CHUNK 0
+
+static void install_schedule(void)
+{
+    const char *env = getenv("OMP_SCHEDULE");
+    if (env != NULL && env[0] != '\0')
+        return;
+    omp_set_schedule(CHOSEN_SCHED_KIND, CHOSEN_SCHED_CHUNK);
+}
+
 static void usage(const char *prog)
 {
-    fprintf(stderr, "usage: %s <in.pgm> <out.pgm> <sobel|gaussian|sharpen> <3|5|7>\n", prog);
+    fprintf(stderr, "usage: %s <in.pgm> <out.pgm> <sobel|gaussian|sharpen> <3|5|7> [threads]\n", prog);
 }
 
 int main(int argc, char **argv)
 {
     int provided = 0;
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_SINGLE, &provided);
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
 
     int rank = 0, size = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    if (provided < MPI_THREAD_FUNNELED) {
+        if (rank == 0) {
+            fprintf(stderr, "error: MPI does not provide MPI_THREAD_FUNNELED (provided=%d)\n", provided);
+        }
+        MPI_Finalize();
+        return 1;
+    }
+
     double t_start = MPI_Wtime();
 
-    if (argc != 5) {
+    if (argc != 5 && argc != 6) {
         if (rank == 0) usage(argv[0]);
         MPI_Finalize();
         return 1;
@@ -66,6 +83,23 @@ int main(int argc, char **argv)
         return 1;
     }
     int k = (int)ksize_long;
+
+    int threads = 1;
+    if (argc == 6) {
+        errno = 0;
+        char *tend = NULL;
+        long t_long = strtol(argv[5], &tend, 10);
+        if (errno != 0 || tend == argv[5] || *tend != '\0' || t_long < 1 || t_long > 64) {
+            if (rank == 0) fprintf(stderr, "threads must be between 1 and 64 (got '%s')\n", argv[5]);
+            MPI_Finalize();
+            return 1;
+        }
+        threads = (int)t_long;
+    }
+
+    /* Set OpenMP thread count and schedule */
+    omp_set_num_threads(threads);
+    install_schedule();
 
     int is_sobel = (strcmp(filter, "sobel") == 0);
     int is_gaussian = (strcmp(filter, "gaussian") == 0);
@@ -263,10 +297,7 @@ int main(int argc, char **argv)
         }
         int halo_count = (int)halo_bytes;
 
-        /*
-         * Step 1: Send my first radius rows to top_nbr;
-         *         Receive bot_nbr's first radius rows into bottom halo.
-         */
+        /* Step 1: Send top rows to top_nbr, receive into bottom halo from bot_nbr */
         unsigned char *send_top = local_in + (size_t)radius * (size_t)width;
         unsigned char *recv_bot = local_in + (size_t)(radius + local_rows) * (size_t)width;
 
@@ -274,10 +305,7 @@ int main(int argc, char **argv)
                      recv_bot, halo_count, MPI_UNSIGNED_CHAR, bot_nbr, 100,
                      MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-        /*
-         * Step 2: Send my last radius rows to bot_nbr;
-         *         Receive top_nbr's last radius rows into top halo.
-         */
+        /* Step 2: Send bottom rows to bot_nbr, receive into top halo from top_nbr */
         unsigned char *send_bot = local_in + (size_t)local_rows * (size_t)width;
         unsigned char *recv_top = local_in;
 
@@ -285,11 +313,7 @@ int main(int argc, char **argv)
                      recv_top, halo_count, MPI_UNSIGNED_CHAR, top_nbr, 200,
                      MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-        /*
-         * Global boundary clamping:
-         * If top_nbr == MPI_PROC_NULL (rank 0), replicate row 0 into top halo.
-         * If bot_nbr == MPI_PROC_NULL (rank PA - 1), replicate last row into bottom halo.
-         */
+        /* Global boundary clamping */
         if (top_nbr == MPI_PROC_NULL) {
             const unsigned char *row0 = local_in + (size_t)radius * (size_t)width;
             for (int r = 0; r < radius; r++) {
@@ -309,7 +333,7 @@ int main(int argc, char **argv)
     double local_halo_s = t_halo_end - t_halo_start;
 
     /*
-     * Convolution Computation Timing
+     * Convolution Computation Timing (Parallelized with OpenMP threads inside each rank)
      */
     size_t local_out_bytes = (size_t)local_rows * (size_t)width;
     unsigned char *local_out = NULL;
@@ -335,10 +359,26 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        if (is_sobel) {
-            sobel_rows(local_in, conv_out_buf, width, total_h, radius, radius + local_rows, &k_a, &k_b);
+        if (threads > 1) {
+            /* OpenMP multi-threaded row computation */
+            if (is_sobel) {
+                #pragma omp parallel for schedule(runtime)
+                for (int y = radius; y < radius + local_rows; y++) {
+                    sobel_rows(local_in, conv_out_buf, width, total_h, y, y + 1, &k_a, &k_b);
+                }
+            } else {
+                #pragma omp parallel for schedule(runtime)
+                for (int y = radius; y < radius + local_rows; y++) {
+                    convolve_rows(local_in, conv_out_buf, width, total_h, y, y + 1, &k_a);
+                }
+            }
         } else {
-            convolve_rows(local_in, conv_out_buf, width, total_h, radius, radius + local_rows, &k_a);
+            /* Pure sequential invocation inside rank */
+            if (is_sobel) {
+                sobel_rows(local_in, conv_out_buf, width, total_h, radius, radius + local_rows, &k_a, &k_b);
+            } else {
+                convolve_rows(local_in, conv_out_buf, width, total_h, radius, radius + local_rows, &k_a);
+            }
         }
 
         memcpy(local_out, conv_out_buf + (size_t)radius * (size_t)width, local_out_bytes);
@@ -434,9 +474,10 @@ int main(int argc, char **argv)
     double total_s = t_end - t_start;
 
     if (rank == 0) {
-        printf("RESULT mode=mpi filter=%s k=%d w=%d h=%d procs=%d active=%d threads=1 "
+        const char *mode = (threads == 1) ? "mpi" : "hybrid";
+        printf("RESULT mode=%s filter=%s k=%d w=%d h=%d procs=%d active=%d threads=%d "
                "scatter_s=%.3f halo_s=%.3f conv_s=%.3f compute_s=%.3f gather_s=%.3f total_s=%.3f\n",
-               filter, k, width, height, size, PA,
+               mode, filter, k, width, height, size, PA, threads,
                max_scatter_s, max_halo_s, max_conv_s, max_compute_s, max_gather_s, total_s);
         fflush(stdout);
     }

@@ -24,9 +24,7 @@ if [[ ! -x "$BIN" ]]; then
 fi
 
 mkdir -p results
-if [[ ! -f "$CSV" ]]; then
-    echo "filter,k,run,width,height,compute_s,total_s" > "$CSV"
-fi
+echo "filter,k,run,width,height,compute_s,total_s" > "$CSV"
 
 if command -v taskset >/dev/null 2>&1; then
     echo "pinning to core 4" >&2
