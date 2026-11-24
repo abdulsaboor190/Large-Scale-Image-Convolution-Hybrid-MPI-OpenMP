@@ -167,7 +167,7 @@ elif [[ "$MODE" == "order" ]]; then
     echo "Starting randomised confirmation benchmark: MODE order (6 repetitions, 9 configs shuffled, 15s cooldown, target: 55 lines in $CSV)" >&2
 
     for rep in 1 2 3 4 5 6; do
-        seed=$(( 1000 * rep + $(date +%s % 1000) ))
+        seed=$(( 1000 * rep + ($(date +%s) % 1000) ))
         echo "[Repetition $rep/6] Logging system state (seed=$seed)..." >&2
         {
             echo "=== Repetition $rep (order) $(date -Iseconds) seed=$seed ==="
