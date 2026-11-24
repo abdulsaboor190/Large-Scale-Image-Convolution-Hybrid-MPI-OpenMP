@@ -91,59 +91,52 @@ All implementations were verified across a comprehensive test matrix against the
 
 ## 5. Experimental Results & Performance Analysis
 
-### 5.1 Benchmark Methodology & Measurement Uncertainty
-Laptop processors operate under constrained thermal dissipation and power envelopes, causing CPU clock speeds to fluctuate across runs.
-- **Speedup Definition:** Speedup is consistently evaluated as the **ratio of medians**:
+### 5.1 Primary Results: Randomised Confirmation Benchmark
+To control for run order and timing sensitivity on this laptop, the primary benchmark evaluation is the **randomised confirmation benchmark** (`results/final_order.csv`, analyzed in `results/final_order_summary.csv`):
+- 6 repetitions of Gaussian 5x5 on the $20,000 \times 20,000$ image (400 MB).
+- 9 configurations executed in a newly shuffled random order per repetition with a 15-second pause between runs.
+- Sequential baseline median compute time $T_{comp} = \mathbf{10.053\text{ s}}$ (raw range: [9.857, 24.667] s).
+- Speedup evaluated strictly as the ratio of medians:
   $$\text{Speedup} = \frac{\text{median}(T_{seq, compute})}{\text{median}(T_{parallel, compute})}$$
-  over the same benchmark run group.
-- **Resolution Limit:** Across separate benchmark sessions on this laptop, Gaussian 5x5 Hybrid (3,4) measured **2.259 s** in a quick cool test, **2.861 s** in the kernels run, and **3.323 s** under sustained load (a ~32% swing). Consequently, differences below approximately **20%** cannot be distinguished from thermal and scheduling jitter and are treated as performance ties.
-- **Headline 12-Thread Speedup Range:** Depending on thermal state, 12-thread speedup ranges from **~3.5x** under sustained load (ratio of medians in the main benchmark) up to **~5.6x** in a cool initial state (Phase 4 test, 12.678 s vs 2.259 s).
 
-### 5.2 Gaussian 5x5 Scaling Summary (Main Benchmark)
+| Configuration | Procs ($P$) | Threads ($T$) | Med $T_{comp}$ (s) | Raw Range $T_{comp}$ (s) | Speedup (Ratio of Medians) | Eff. / HW Thread | Eff. / Physical Core | Med $T_{total}$ (s) |
+|---|---|---|---|---|---|---|---|---|
+| **Sequential** | 1 | 1 | 10.053 | [9.857, 24.667] | 1.000x | 1.000 | 1.000 | 11.053 |
+| **OpenMP (1x6)** | 1 | 6 | 3.050 | [2.914, 4.127] | 3.296x | 0.549 | 0.549 | 4.101 |
+| **MPI (6x1)** | 6 | 1 | 3.178 | [2.895, 3.594] | 3.164x | 0.527 | 0.527 | 5.327 |
+| **MPI (12x1)** | 12 | 1 | 2.111 | [2.015, 4.795] | 4.761x | 0.397 | 0.793 | 4.962 |
+| **OpenMP (1x12)** | 1 | 12 | 2.157 | [2.037, 2.545] | 4.659x | 0.388 | 0.777 | 3.493 |
+| **Hybrid (2x6)** | 2 | 6 | 2.197 | [2.138, 2.670] | 4.575x | 0.381 | 0.762 | 3.868 |
+| **Hybrid (4x3)** | 4 | 3 | 2.248 | [2.029, 2.633] | 4.472x | 0.373 | 0.745 | 4.205 |
+| **Hybrid (3x4)** | 3 | 4 | 2.252 | [2.070, 5.400] | 4.465x | 0.372 | 0.744 | 4.406 |
+| **Hybrid (6x2)** | 6 | 2 | 2.306 | [2.026, 2.653] | 4.358x | 0.363 | 0.726 | 4.386 |
 
-| Total Threads | OpenMP Speedup | MPI Speedup | Best Hybrid Speedup | Efficiency / HW Thread | Efficiency / Core |
-|---|---|---|---|---|---|
-| 1 | 0.88x | 0.92x | — | 0.88 | 0.88 |
-| 2 | 1.51x | 1.66x | — | 0.76 | 0.76 |
-| 3 | 2.02x | 2.11x | — | 0.67 | 0.67 |
-| 4 | 2.23x | 2.52x | — | 0.56 | 0.56 |
-| 6 | 2.96x | 2.99x | 3.16x (2x3) | 0.49 | 0.49 |
-| 8 | 3.06x | 3.73x | — | 0.38 | 0.51 |
-| 12 | 3.95x | 3.62x | 3.57x (4x3) | 0.30 | 0.60 |
+**Key Findings:**
+1. **Headline Speedup:** 12-thread speedup reaches **4.4x to 4.8x** across OpenMP, MPI, and hybrid configurations. On 6 threads, speedup is **3.2x to 3.3x**.
+2. **SMT Scaling (6 to 12 Threads):** Scaling from 6 physical cores to 12 SMT threads increases speedup from ~3.3x to ~4.7x (an increase of about +41% throughput). Scaling is already sub-linear across the 6 physical cores (~3.3x speedup on 6 threads, efficiency per physical core $\approx 0.55$), cause not measured. Efficiency per physical core rises from ~0.53–0.55 at 6 threads to ~0.73–0.79 at 12 threads.
+3. **12-Thread Parity:** All six 12-thread configurations span a narrow band of 0.195 s (8.4%), well within our 20% measurement resolution margin. The 2.306 s median for Hybrid 6x2 **is consistent with** the other configurations when run order is randomised.
 
-![Speedup Curves](../results/final_speedup.png)
-![Efficiency Curves](../results/final_efficiency.png)
+### 5.2 Secondary Measurements & Operating Condition Impact
+To evaluate performance under continuous and isolated execution profiles:
+- **Main Run (Continuous execution, fixed order):** Running 5 repetitions of 21 configurations continuously in fixed order (seq $\to$ omp $\to$ mpi $\to$ hyb) with 2 s pause yielded 12-thread speedups of **3.1x to 3.9x** (median compute times 2.84 s – 3.62 s). Moving from 6 threads to 12 threads in this run increased speedup by about +33%.
+- **Phase 4 Quick Test (Single isolated runs):** Running an isolated test from an idle machine state yielded a sequential baseline of 12.678 s and hybrid (3,4) time of 2.259 s, corresponding to a **5.6x speedup**.
+- *Note:* Descriptions of operating conditions (such as machine temperature or power state) are unverified hypotheses.
 
-### 5.3 Comparison of 12-Thread Configurations ($P \times T = 12$)
+### 5.3 Measurement Noise & Resolution Limit
+Across three separate measurement sessions on this laptop, the exact same configuration (**Gaussian 5x5, Hybrid $P=3, T=4$**) produced 2.259 s (Phase 4), 2.861 s (kernels run), and 3.323 s (main run). **The slowest of the three measurements of the same configuration is 47% above the fastest** ($(3.323 - 2.259)/2.259 = 47.1\%$). Consequently, performance differences below approximately **20%** cannot be reliably resolved on this laptop and are treated as performance ties.
 
-![Hybrid Comparison](../results/final_hybrid_compare.png)
+### 5.4 Kernel-Size Scaling (Mode `kernels`)
+Testing across all 9 filter configurations (3x3, 5x5, 7x7) using Hybrid $(P=3, T=4)$ on the $20,000 \times 20,000$ PGM (`results/final_summary_kernels.csv`):
+- **Gaussian:** 3.364x (3x3) $\to$ 3.467x (5x5) $\to$ 4.141x (7x7)
+- **Sharpen:** 3.361x (3x3) $\to$ 3.814x (5x5) $\to$ 4.118x (7x7)
+- **Sobel:** 4.263x (3x3) $\to$ 4.264x (5x5) $\to$ 4.795x (7x7)
 
-When running at 12 execution contexts in the main benchmark:
-- **OpenMP (1x12):** 2.836 s median compute time (3.95x speedup)
-- **MPI (12x1):** 3.098 s median compute time (3.62x speedup)
-- **Hybrid (4x3):** 3.141 s median compute time (3.57x speedup)
-- **Hybrid (2x6):** 3.176 s median compute time (3.53x speedup)
-- **Hybrid (3x4):** 3.323 s median compute time (3.37x speedup)
-- **Hybrid (6x2):** 3.620 s median compute time (3.10x speedup)
-
-**Run Order Limitation:** In the main benchmark, run order was strictly fixed, so Hybrid 6x2 always executed last under accumulated heat. In the randomised confirmation benchmark with 15 s cooling pauses, Hybrid 6x2 achieved a median compute time of **2.306 s**, within 8.4% of the fastest configuration (MPI 12x1 at 2.111 s). This confirms that differences among the 12-thread configurations remain within our 20% resolution margin.
-
-### 5.4 Arithmetic Intensity & Kernel Size Scaling
-
-![Kernel Size Effect](../results/final_kernels.png)
-
-Testing across all 9 filter configurations (3x3, 5x5, 7x7) using Hybrid $(P=3, T=4)$:
-- **3x3 Filters:** Speedup $\approx 3.36\text{x} - 4.26\text{x}$
-- **5x5 Filters:** Speedup $\approx 3.47\text{x} - 4.26\text{x}$
-- **7x7 Filters:** Speedup $\approx 4.12\text{x} - 4.80\text{x}$
-
-*Hypothesis (not measured):* Larger kernels perform $k^2$ operations per pixel, increasing arithmetic intensity and yielding higher hardware thread utilization relative to memory streaming limits.
+**Assessment:** The upward trend is consistent across all three filters. However, most individual step changes fall within the 20% measurement resolution limit, and run order in this benchmark was fixed. Therefore, while suggestive of higher arithmetic intensity improving parallel scaling, this trend is **suggestive, not conclusive**.
 
 ### 5.5 Communication vs. Computation Breakdown
-
 From `results/final_breakdown.csv`:
-- **Halo Exchange Overhead:** Consistently sub-millisecond ($< 0.002$ s, $< 0.1\%$ of compute time) due to shared-memory intra-node transports.
-- **Serial Portion:** Single-process disk I/O, `MPI_Scatterv`, and `MPI_Gatherv` require ~1.5 to 2.5 s. At 12 threads, non-compute sequential overhead accounts for **48.2%** of total execution time, illustrating Amdahl's Law in practice.
+- **Halo Exchange Overhead:** Sub-millisecond ($< 0.002$ s, $< 0.1\%$ of compute time) across all runs via intra-node shared-memory transports.
+- **Serial Portion:** Single-process disk I/O, `MPI_Scatterv`, and `MPI_Gatherv` require ~1.5 to 2.5 s. At 12 processes, non-compute sequential overhead accounts for **48.2%** of total execution time, illustrating Amdahl's Law in practice.
 
 ---
 
@@ -162,14 +155,14 @@ From `results/final_breakdown.csv`:
 
 ## 7. Limitations of the Study
 
-1. **Fixed Run Order in Main Benchmark:** Main benchmark configurations ran in a fixed order (Sequential $\to$ OpenMP $\to$ MPI $\to$ Hybrid), causing later configurations to run warmer. Randomised testing confirmed that apparent deficits like 6x2 were ordering artifacts.
-2. **Thermal & Power Budgets:** The laptop processor operates in a 15–25W TDP envelope; multi-core sustained execution causes frequency variations between runs.
-3. **Resolution Threshold:** Differences under ~20% cannot be resolved from platform jitter on this machine.
+1. **Occasional Run Outliers:** Sequential runs show occasional 2–2.5x outliers (e.g., 28.0 s in `final_main.csv`, 24.7 s in `final_order.csv`, and 49.3 s / 71.5 s during initial Sobel runs in `final_kernels.csv`). Parallel runs also occasionally show 2x outliers (e.g., 5.4 s vs 2.1 s for hybrid 3x4). Medians are used throughout this study; the underlying cause of these outliers is unknown.
+2. **Fixed Run Order in Main Benchmark:** Main benchmark configurations ran in a fixed order (Sequential $\to$ OpenMP $\to$ MPI $\to$ Hybrid), meaning later configurations may have executed under different operating states. Randomised testing addressed this limitation.
+3. **Resolution Threshold:** Because the slowest measurement of the same configuration is 47% above the fastest, differences below approximately 20% cannot be resolved on this platform.
 4. **Single Machine / Shared Node:** All MPI processes and OpenMP threads executed on one physical laptop processor; inter-node network latencies were not evaluated.
-5. **Serial I/O Amdahl Cap:** Single-process POSIX file I/O limits overall speedup regardless of compute parallelism.
+5. **Serial I/O Amdahl Cap:** Single-process POSIX file I/O limits overall wall-clock speedup regardless of compute parallelism.
 
 ---
 
 ## 8. Conclusion
 
-This project demonstrated that while OpenMP provides shared-memory parallelism and MPI provides scalable partitioning, the **Hybrid MPI + OpenMP** model provides the greatest deployment flexibility. On a single multi-core NUMA/SMT node, hybrid execution matches pure MPI and OpenMP performance within our 20% measurement resolution margin, while positioning the codebase for distributed multi-node clusters where shared-memory threads operate within each compute node and MPI communicates across high-speed interconnects.
+This project demonstrated that while OpenMP provides shared-memory parallelism and MPI provides scalable partitioning, the **Hybrid MPI + OpenMP** model provides the greatest deployment flexibility. On a single multi-core NUMA/SMT node, hybrid execution matches pure MPI and OpenMP performance within our 20% measurement resolution margin (achieving 4.4x to 4.8x speedup on 12 threads in the primary randomised benchmark), while positioning the codebase for distributed multi-node clusters where shared-memory threads operate within each compute node and MPI communicates across high-speed interconnects.

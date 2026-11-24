@@ -51,8 +51,8 @@ Dividing execution times on a per-repetition basis is sensitive to individual ru
 
 ### Q10: Why do we report efficiency per physical core in addition to efficiency per hardware thread?
 **Answer:**
-The Ryzen 5 7430U has 6 physical cores with SMT (12 hardware threads). SMT threads share execution pipelines and L1/L2 caches on the same core. Normalizing by 12 threads penalizes SMT unfairly; normalizing by $\min(P \times T, 6)$ measures how effectively the physical execution resources are being utilized.  
-**Reference:** `scripts/analyze_final.py`, lines 72–74; `docs/results_analysis.md` §3.
+The Ryzen 5 7430U has 6 physical cores with simultaneous multi-threading (SMT, 12 hardware threads). SMT threads share execution pipelines and L1/L2 caches on the same physical core. Normalizing by 12 threads penalizes SMT unfairly; normalizing by $\min(P \times T, 6)$ measures how effectively the physical execution resources are being utilized. In our primary randomised run, efficiency per physical core reached ~0.73–0.79 at 12 threads.  
+**Reference:** `docs/results_analysis.md` §1; `results/final_order_summary.csv`.
 
 ### Q11: How is the halo exchange implemented to avoid deadlocks?
 **Answer:**
@@ -66,13 +66,13 @@ Rank 0 reads the full 400 MB image into memory, performs `MPI_Scatterv`, and imm
 
 ### Q13: What is the observed relationship between kernel size ($3 \times 3, 5 \times 5, 7 \times 7$) and parallel speedup?
 **Answer:**
-Speedup consistently increases with kernel size (from ~3.4x at 3x3 up to ~4.8x at 7x7). *Hypothesis (not measured):* Larger kernels perform $k^2$ multiply-accumulates per pixel read, increasing arithmetic intensity and yielding better computational core utilization relative to memory streaming limits.  
-**Reference:** `results/final_summary_kernels.csv`; `docs/results_analysis.md` §6.
+Speedup consistently increases with kernel size across all three filters (from ~3.4x at 3x3 up to ~4.8x at 7x7). However, most individual step changes fall within our 20% measurement resolution limit and run order was fixed, so this trend is suggestive of higher arithmetic intensity improving parallel scaling, but not conclusive.  
+**Reference:** `results/final_summary_kernels.csv`; `docs/results_analysis.md` §5.
 
 ### Q14: How does Amdahl's Law manifest in this project?
 **Answer:**
 File reading, `MPI_Scatterv`, `MPI_Gatherv`, and file writing are sequential operations performed by Rank 0. At 12 processes, non-compute operations account for 48.2% of total wall-clock time. Consequently, total wall-clock speedup is capped at ~5x regardless of how many cores are added.  
-**Reference:** `results/final_breakdown.csv`; `docs/results_analysis.md` §5.
+**Reference:** `results/final_breakdown.csv`; `docs/results_analysis.md` §4.
 
 ### Q15: How does Sobel edge detection differ computationally from Gaussian blur or Sharpening?
 **Answer:**
@@ -86,8 +86,8 @@ For $P \times T = 12$, we used `mpirun --use-hwthread-cpus --bind-to hwthread --
 
 ### Q17: What was the performance difference between the 12-thread configurations ($1 \times 12, 2 \times 6, 3 \times 4, 4 \times 3, 12 \times 1, 6 \times 2$)?
 **Answer:**
-In the randomised benchmark with cooling pauses, all six 12-thread configurations achieved median compute times between 2.11 s and 2.31 s (speedups 4.36x to 4.76x), spanning an 8.4% spread. Because this spread is well within our 20% measurement resolution threshold, their performance is practically equivalent.  
-**Reference:** `docs/results_analysis.md` §4.1, §7; `results/final_order_summary.csv`.
+In the primary randomised benchmark, all six 12-thread configurations achieved median compute times between 2.11 s and 2.31 s (speedups 4.36x to 4.76x), spanning an 8.4% spread. Because this spread is well within our 20% measurement resolution threshold, their performance is practically equivalent. The result for Hybrid 6x2 (2.306 s) is consistent with the other configurations when run order is randomised.  
+**Reference:** `docs/results_analysis.md` §1; `results/final_order_summary.csv`.
 
 ### Q18: What is the correlation operator, and how does it differ from mathematical convolution?
 **Answer:**
@@ -103,6 +103,6 @@ In distributed computing, different ranks may finish computation at slightly dif
 **Answer:**
 1. All ranks ran on a single node sharing one memory bus, so true network interconnect latencies were not tested.  
 2. Collective I/O was serial (Rank 0 reads and writes), creating an Amdahl limit on wall-clock speedup.  
-3. Thermal and power state changes the result by up to ~32%, meaning differences below ~20% cannot be resolved on this laptop.  
-4. Main benchmark configurations ran in a fixed order, making later runs hotter; randomised confirmation testing was required to control for this ordering effect.  
-**Reference:** `docs/results_analysis.md` §7, §8.
+3. The slowest measurement of the same configuration was 47% above the fastest across sessions, meaning differences below ~20% cannot be resolved on this laptop.  
+4. Sequential runs showed occasional 2–2.5x outliers (e.g. 28 s vs 10–11 s), and parallel runs occasionally showed 2x outliers; medians are used and the cause is unknown.  
+**Reference:** `docs/results_analysis.md` §3, §6.
