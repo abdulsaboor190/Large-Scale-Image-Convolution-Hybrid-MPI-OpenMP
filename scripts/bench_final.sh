@@ -3,6 +3,7 @@
 # Usage:
 #   bash scripts/bench_final.sh main     # 5 repeats, gaussian 5x5, 21 runs/rep -> 105 rows + 1 header = 106 lines
 #   bash scripts/bench_final.sh kernels  # 3 repeats, all 9 filter/k combos, seq + hyb(3,4) -> 54 rows + 1 header = 55 lines
+#   bash scripts/bench_final.sh order    # 6 repeats, gaussian 5x5, 9 configs shuffled, 15s cool -> 54 rows + 1 header = 55 lines
 
 cd "$(dirname "$0")/.."
 set -euo pipefail
@@ -13,8 +14,8 @@ if [[ -f "$HOME/pdc-venv/bin/activate" ]]; then
 fi
 
 MODE="${1:-}"
-if [[ "$MODE" != "main" && "$MODE" != "kernels" ]]; then
-    echo "Usage: $0 <main|kernels>" >&2
+if [[ "$MODE" != "main" && "$MODE" != "kernels" && "$MODE" != "order" ]]; then
+    echo "Usage: $0 <main|kernels|order>" >&2
     exit 1
 fi
 
@@ -42,9 +43,9 @@ log_system_state() {
 }
 
 # Run sequential
-# Args: group filter k rep
+# Args: group filter k rep [cooldown]
 run_seq() {
-    local group="$1" filt="$2" k="$3" rep="$4"
+    local group="$1" filt="$2" k="$3" rep="$4" cooldown="${5:-2}"
     rm -f "$OUT"
     local line
     line=$(taskset -c 4 ./build/seq_convolve "$IMG" "$OUT" "$filt" "$k")
@@ -55,13 +56,13 @@ run_seq() {
     ts=$(printf '%s\n' "$line" | sed -n 's/.*total_s=\([0-9.]*\).*/\1/p')
     ts_now=$(date +%s)
     echo "$group,seq,$filt,$k,1,1,$rep,,,$cs,$cs,,$ts,$ts_now" >> "$CSV"
-    sleep 2
+    sleep "$cooldown"
 }
 
 # Run OpenMP
-# Args: group filter k threads rep
+# Args: group filter k threads rep [cooldown]
 run_omp() {
-    local group="$1" filt="$2" k="$3" thr="$4" rep="$5"
+    local group="$1" filt="$2" k="$3" thr="$4" rep="$5" cooldown="${6:-2}"
     rm -f "$OUT"
     local line
     line=$(OMP_PLACES=cores OMP_PROC_BIND=close ./build/omp_convolve "$IMG" "$OUT" "$filt" "$k" "$thr")
@@ -72,13 +73,13 @@ run_omp() {
     ts=$(printf '%s\n' "$line" | sed -n 's/.*total_s=\([0-9.]*\).*/\1/p')
     ts_now=$(date +%s)
     echo "$group,omp,$filt,$k,1,$thr,$rep,,,$cs,$cs,,$ts,$ts_now" >> "$CSV"
-    sleep 2
+    sleep "$cooldown"
 }
 
 # Run MPI / Hybrid
-# Args: group mode filter k procs threads rep
+# Args: group mode filter k procs threads rep [cooldown]
 run_mpi_hyb() {
-    local group="$1" m="$2" filt="$3" k="$4" procs="$5" thr="$6" rep="$7"
+    local group="$1" m="$2" filt="$3" k="$4" procs="$5" thr="$6" rep="$7" cooldown="${8:-2}"
     local total=$((procs * thr))
     rm -f "$OUT"
     local line
@@ -106,7 +107,7 @@ run_mpi_hyb() {
     ts_now=$(date +%s)
 
     echo "$group,$m,$filt,$k,$procs,$thr,$rep,$sc,$hl,$cv,$cp,$gt,$tt,$ts_now" >> "$CSV"
-    sleep 2
+    sleep "$cooldown"
 }
 
 if [[ "$MODE" == "main" ]]; then
@@ -159,4 +160,47 @@ elif [[ "$MODE" == "kernels" ]]; then
         echo "[Repetition $rep/3] Finished." >&2
     done
     echo "MODE kernels complete. Results in $CSV" >&2
+
+elif [[ "$MODE" == "order" ]]; then
+    CSV=results/final_order.csv
+    echo "group,mode,filter,k,procs,threads,rep,scatter_s,halo_s,conv_s,compute_s,gather_s,total_s,timestamp" > "$CSV"
+    echo "Starting randomised confirmation benchmark: MODE order (6 repetitions, 9 configs shuffled, 15s cooldown, target: 55 lines in $CSV)" >&2
+
+    for rep in 1 2 3 4 5 6; do
+        seed=$(( 1000 * rep + $(date +%s % 1000) ))
+        echo "[Repetition $rep/6] Logging system state (seed=$seed)..." >&2
+        {
+            echo "=== Repetition $rep (order) $(date -Iseconds) seed=$seed ==="
+            uptime
+            grep "cpu MHz" /proc/cpuinfo || true
+            echo ""
+        } >> "$LOG"
+
+        # 9 configs to shuffle:
+        # 1: seq
+        # 2: omp 6
+        # 3: omp 12
+        # 4: mpi 6 1
+        # 5: mpi 12 1
+        # 6: hybrid 2 6
+        # 7: hybrid 3 4
+        # 8: hybrid 4 3
+        # 9: hybrid 6 2
+        order=$(python3 -c "import random; items = ['seq:1:1', 'omp:1:6', 'omp:1:12', 'mpi:6:1', 'mpi:12:1', 'hybrid:2:6', 'hybrid:3:4', 'hybrid:4:3', 'hybrid:6:2']; random.seed($seed); random.shuffle(items); print(' '.join(items))")
+        echo "[Repetition $rep/6] Execution order: $order" >&2
+
+        for item in $order; do
+            IFS=':' read -r m p t <<< "$item"
+            echo "  -> running $m (procs=$p, threads=$t) with 15s cooldown..." >&2
+            if [[ "$m" == "seq" ]]; then
+                run_seq "order" "gaussian" 5 "$rep" 15
+            elif [[ "$m" == "omp" ]]; then
+                run_omp "order" "gaussian" 5 "$t" "$rep" 15
+            else
+                run_mpi_hyb "order" "$m" "gaussian" 5 "$p" "$t" "$rep" 15
+            fi
+        done
+        echo "[Repetition $rep/6] Finished." >&2
+    done
+    echo "MODE order complete. Results in $CSV" >&2
 fi
