@@ -26,7 +26,7 @@ We enforce the active rank constraint: $P_A = \max(1, \min(P, \lfloor H / r \rfl
 
 ### Q5: Why is `MPI_THREAD_FUNNELED` sufficient for your hybrid implementation?
 **Answer:**
-`MPI_THREAD_FUNNELED` specifies that only the master thread makes MPI calls. In our hybrid model, communication (`Scatterv`, `Sendrecv`, `Gatherv`) occurs entirely outside of OpenMP parallel regions. Worker threads are only spawned during local compute. This eliminates the locking overhead of `MPI_THREAD_MULTIPLE`.  
+`MPI_THREAD_FUNNELED` specifies that only the master thread makes MPI calls. In our hybrid model, communication (`Scatterv`, `Sendrecv`, `Gatherv`) occurs entirely outside of OpenMP parallel regions. Worker threads are active only during local compute. This eliminates the locking overhead of `MPI_THREAD_MULTIPLE`.  
 **Reference:** `src/mpi_convolve.c`, lines 40–53; `docs/hybrid_design.md` §2.
 
 ### Q6: Why did you lock in a `static` schedule for OpenMP loops?
@@ -44,10 +44,10 @@ The pointers `in` and `out` lacked C99 `__restrict__` qualifiers in the convolut
 Bit-exact means the 8-bit output bytes match 100% across all $400,000,000$ pixels with `--tol 0` (zero tolerance). We guarantee this because all parallel models invoke the exact same core arithmetic functions in `src/conv_core.h`, preserving identical floating-point summation order, rounding (`floorf(x + 0.5f)`), and clamping (`0` to `255`).  
 **Reference:** `src/conv_core.h`, lines 59–66 (`round_u8`); `docs/DECISIONS.md`.
 
-### Q9: Why did you use paired speedup instead of dividing by an average sequential baseline?
+### Q9: Why do you evaluate speedup as the ratio of medians rather than computing a speedup ratio per run?
 **Answer:**
-Laptop thermal throttling causes single-core baseline timings to vary by up to 2.7x between cool and heated states. By interleaving sequential and parallel runs in the same repetition, paired speedup ($\text{Speedup}_{rep} = T_{seq, rep} / T_{parallel, rep}$) compares parallel performance against the actual clock condition of the machine at that exact moment.  
-**Reference:** `scripts/bench_final.sh`, lines 120–150; `docs/results_analysis.md` §1–2.
+Dividing execution times on a per-repetition basis is sensitive to individual run outliers (e.g., an isolated single-core run that experienced OS background latency). Taking the ratio of medians ($\text{Speedup} = \text{median}(T_{seq}) / \text{median}(T_{parallel})$) provides a robust, stable speedup metric across full benchmark suites.  
+**Reference:** `scripts/analyze_final.py`; `docs/results_analysis.md` §1–2.
 
 ### Q10: Why do we report efficiency per physical core in addition to efficiency per hardware thread?
 **Answer:**
@@ -64,14 +64,14 @@ We use `MPI_Sendrecv`, which executes simultaneous non-blocking send and receive
 Rank 0 reads the full 400 MB image into memory, performs `MPI_Scatterv`, and immediately frees the full input buffer before local computation begins. It only allocates the 400 MB output buffer immediately before `MPI_Gatherv`. This caps peak memory at $\sim 450$ MB.  
 **Reference:** `src/mpi_convolve.c`, lines 294–300, 396–405.
 
-### Q13: What is the impact of kernel size ($3 \times 3, 5 \times 5, 7 \times 7$) on parallel speedup?
+### Q13: What is the observed relationship between kernel size ($3 \times 3, 5 \times 5, 7 \times 7$) and parallel speedup?
 **Answer:**
-Speedup increases with kernel size. A $3 \times 3$ kernel performs 9 multiplies per pixel, making it memory-bandwidth bound. A $7 \times 7$ kernel performs 49 multiplies per pixel, increasing arithmetic intensity. Because compute cores spend more time computing relative to memory loading, parallel speedup increases from ~3.4x to ~4.9x.  
+Speedup consistently increases with kernel size (from ~3.4x at 3x3 up to ~4.8x at 7x7). *Hypothesis (not measured):* Larger kernels perform $k^2$ multiply-accumulates per pixel read, increasing arithmetic intensity and yielding better computational core utilization relative to memory streaming limits.  
 **Reference:** `results/final_summary_kernels.csv`; `docs/results_analysis.md` §6.
 
 ### Q14: How does Amdahl's Law manifest in this project?
 **Answer:**
-File reading, `MPI_Scatterv`, `MPI_Gatherv`, and file writing are sequential operations performed by Rank 0. At 12 processes, these non-compute operations account for 48.2% of total wall-clock time. Consequently, total wall-clock speedup is capped at ~5x regardless of how many cores are added.  
+File reading, `MPI_Scatterv`, `MPI_Gatherv`, and file writing are sequential operations performed by Rank 0. At 12 processes, non-compute operations account for 48.2% of total wall-clock time. Consequently, total wall-clock speedup is capped at ~5x regardless of how many cores are added.  
 **Reference:** `results/final_breakdown.csv`; `docs/results_analysis.md` §5.
 
 ### Q15: How does Sobel edge detection differ computationally from Gaussian blur or Sharpening?
@@ -84,10 +84,10 @@ Gaussian and Sharpen apply a single 2D kernel. Sobel applies two separable kerne
 For $P \times T = 12$, we used `mpirun --use-hwthread-cpus --bind-to hwthread --map-by socket:PE=T -np P` combined with `OMP_PLACES=threads OMP_PROC_BIND=close`. For $P \times T \le 6$, we used `--bind-to core --map-by socket:PE=T` with `OMP_PLACES=cores`. This ensures each rank owns an isolated set of cores/threads.  
 **Reference:** `docs/hybrid_design.md` §5; `results/binding_check.txt`.
 
-### Q17: What was the performance difference between the 12-thread configurations ($1 \times 12, 2 \times 6, 3 \times 4, 4 \times 3, 12 \times 1$)?
+### Q17: What was the performance difference between the 12-thread configurations ($1 \times 12, 2 \times 6, 3 \times 4, 4 \times 3, 12 \times 1, 6 \times 2$)?
 **Answer:**
-$1 \times 12$ (OpenMP), $12 \times 1$ (MPI), $4 \times 3$ (Hybrid), $2 \times 6$ (Hybrid), and $3 \times 4$ (Hybrid) all achieved paired speedups between 3.37x and 3.62x. Because this 7.1% variation is within the 8% measurement noise threshold, they are statistically tied in performance.  
-**Reference:** `docs/results_analysis.md` §4.1.
+In the randomised benchmark with cooling pauses, all six 12-thread configurations achieved median compute times between 2.11 s and 2.31 s (speedups 4.36x to 4.76x), spanning an 8.4% spread. Because this spread is well within our 20% measurement resolution threshold, their performance is practically equivalent.  
+**Reference:** `docs/results_analysis.md` §4.1, §7; `results/final_order_summary.csv`.
 
 ### Q18: What is the correlation operator, and how does it differ from mathematical convolution?
 **Answer:**
@@ -102,6 +102,7 @@ In distributed computing, different ranks may finish computation at slightly dif
 ### Q20: What are the main real-world limitations of this implementation?
 **Answer:**
 1. All ranks ran on a single node sharing one memory bus, so true network interconnect latencies were not tested.  
-2. Collective I/O was serial (Rank 0 reads and writes), creating an Amdahl bottleneck.  
-3. Laptop power/thermal throttling introduced non-negligible performance variability.  
-**Reference:** `docs/results_analysis.md` §7.
+2. Collective I/O was serial (Rank 0 reads and writes), creating an Amdahl limit on wall-clock speedup.  
+3. Thermal and power state changes the result by up to ~32%, meaning differences below ~20% cannot be resolved on this laptop.  
+4. Main benchmark configurations ran in a fixed order, making later runs hotter; randomised confirmation testing was required to control for this ordering effect.  
+**Reference:** `docs/results_analysis.md` §7, §8.
