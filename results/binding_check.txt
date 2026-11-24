@@ -1,0 +1,42 @@
+=== Binding check for (3,4), (2,3), (12,1) ===
+--- (3,4): P=3, T=4 (Total 12 threads) ---
+[DESKTOP-U438OTT:02348] Rank 0 bound to package[0][hwt:L0-3]
+[DESKTOP-U438OTT:02348] Rank 1 bound to package[0][hwt:L4-7]
+[DESKTOP-U438OTT:02348] Rank 2 bound to package[0][hwt:L8-11]
+level 1 thread 0x79967b2218c0 affinity 8
+level 1 thread 0x799673fff6c0 affinity 9
+level 1 thread 0x79966bfff6c0 affinity 10
+level 1 thread 0x79966b7fe6c0 affinity 11
+level 1 thread 0x7f5cfe44a8c0 affinity 0
+level 1 thread 0x7f5cf7b3c6c0 affinity 1
+level 1 thread 0x7f5ceffff6c0 affinity 2
+level 1 thread 0x7f5cef7fe6c0 affinity 3
+level 1 thread 0x721695d578c0 affinity 4
+level 1 thread 0x72168f5ff6c0 affinity 5
+level 1 thread 0x72168ccfd6c0 affinity 6
+level 1 thread 0x721686fff6c0 affinity 7
+RESULT mode=hybrid filter=gaussian k=3 w=5 h=5 procs=3 active=3 threads=4 scatter_s=0.000 halo_s=0.000 conv_s=0.002 compute_s=0.002 gather_s=0.000 total_s=0.002
+--- (2,3): P=2, T=3 (Total 6 threads / physical cores) ---
+[DESKTOP-U438OTT:02372] Rank 0 bound to package[0][core:L0-2]
+[DESKTOP-U438OTT:02372] Rank 1 bound to package[0][core:L3-5]
+level 1 thread 0x7f73f4c398c0 affinity 0-1
+level 1 thread 0x7f73f23086c0 affinity 2-3
+level 1 thread 0x7f73f08cf6c0 affinity 4-5
+level 1 thread 0x75ae3642c8c0 affinity 6-7
+level 1 thread 0x75ae2f33c6c0 affinity 8-9
+level 1 thread 0x75ae2c9396c0 affinity 10-11
+RESULT mode=hybrid filter=gaussian k=3 w=5 h=5 procs=2 active=2 threads=3 scatter_s=0.000 halo_s=0.000 conv_s=0.000 compute_s=0.000 gather_s=0.000 total_s=0.001
+--- (12,1): P=12, T=1 (Total 12 threads) ---
+[DESKTOP-U438OTT:02387] Rank 0 bound to package[0][hwt:L0]
+[DESKTOP-U438OTT:02387] Rank 1 bound to package[0][hwt:L1]
+[DESKTOP-U438OTT:02387] Rank 2 bound to package[0][hwt:L2]
+[DESKTOP-U438OTT:02387] Rank 3 bound to package[0][hwt:L3]
+[DESKTOP-U438OTT:02387] Rank 4 bound to package[0][hwt:L4]
+[DESKTOP-U438OTT:02387] Rank 5 bound to package[0][hwt:L5]
+[DESKTOP-U438OTT:02387] Rank 6 bound to package[0][hwt:L6]
+[DESKTOP-U438OTT:02387] Rank 7 bound to package[0][hwt:L7]
+[DESKTOP-U438OTT:02387] Rank 8 bound to package[0][hwt:L8]
+[DESKTOP-U438OTT:02387] Rank 9 bound to package[0][hwt:L9]
+[DESKTOP-U438OTT:02387] Rank 10 bound to package[0][hwt:L10]
+[DESKTOP-U438OTT:02387] Rank 11 bound to package[0][hwt:L11]
+RESULT mode=mpi filter=gaussian k=3 w=5 h=5 procs=12 active=5 threads=1 scatter_s=0.000 halo_s=0.003 conv_s=0.000 compute_s=0.003 gather_s=0.000 total_s=0.012

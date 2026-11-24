@@ -72,7 +72,7 @@ report/     final report material
 | 2b | Fix OpenMP 1-thread performance regression & redo scaling | DONE |
 | 3 | MPI: 1-D row blocks, blocking halo exchange (MPI_Sendrecv), Scatterv/Gatherv | DONE |
 | 4 | Hybrid: OpenMP threads inside each rank (MPI_Init_thread FUNNELED) | DONE |
-| 5 | Reduced benchmark (gaussian 5x5: MPI, OpenMP, hybrid) & final report | NEXT |
+| 5 | Final benchmark, analysis, report, viva notes, cleanup | DONE |
 
 Work on ONE phase at a time. Do not start a later phase unless asked. When a phase finishes, update this table.
 
